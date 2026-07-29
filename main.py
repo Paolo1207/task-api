@@ -10,6 +10,11 @@ class TaskCreate(BaseModel):
     title: str = ""
 
 
+class TaskUpdate(BaseModel):
+    title: str | None = None
+    done: bool | None = None
+
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
@@ -64,3 +69,33 @@ def create_task(body: TaskCreate):
     tasks.append(task)
     next_id += 1
     return task
+
+
+@app.put("/tasks/{task_id}")
+def update_task(task_id: int, body: TaskUpdate):
+    task = find_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    if body.title is None and body.done is None:
+        raise HTTPException(status_code=400, detail="provide at least title or done to update")
+
+    if body.title is not None:
+        title = body.title.strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="title cannot be empty")
+        task["title"] = title
+
+    if body.done is not None:
+        task["done"] = body.done
+
+    return task
+
+
+@app.delete("/tasks/{task_id}", status_code=204)
+def delete_task(task_id: int):
+    task = find_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    tasks.remove(task)
+    return None
