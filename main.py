@@ -131,6 +131,25 @@ def login(body: AuthCredentials):
     }
 
 
+@app.get("/public/info")
+def public_info():
+    return {"message": "Welcome stranger! This info is public."}
+
+
+@app.get("/protected/profile")
+def protected_profile(request: Request):
+    auth_header = request.headers.get("Authorization")
+
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Access token required")
+
+    token = auth_header.removeprefix("Bearer ").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Access token required")
+
+    return {"message": "token received (not verified yet)", "token_preview": token[:10] + "..."}
+
+
 def find_task(task_id: int):
     for task in tasks:
         if task["id"] == task_id:
