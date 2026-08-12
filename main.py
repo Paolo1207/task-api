@@ -5,6 +5,7 @@ import sqlite3
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 from supabase import create_client, Client
 
@@ -136,15 +137,14 @@ def public_info():
     return {"message": "Welcome stranger! This info is public."}
 
 
-def get_current_user(request: Request):
-    auth_header = request.headers.get("Authorization")
+bearer_scheme = HTTPBearer(auto_error=False)
 
-    if not auth_header or not auth_header.startswith("Bearer "):
+
+def get_current_user(request: Request, credentials=Depends(bearer_scheme)):
+    if credentials is None:
         raise HTTPException(status_code=401, detail="Access token required")
 
-    token = auth_header.removeprefix("Bearer ").strip()
-    if not token:
-        raise HTTPException(status_code=401, detail="Access token required")
+    token = credentials.credentials
 
     try:
         result = supabase.auth.get_user(token)
