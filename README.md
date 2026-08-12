@@ -115,8 +115,8 @@ pasting a valid access token lets you call any protected route via
 "Try it out" without manually setting headers.
 
 ![Task-API UI with bearer auth](Task-api-UI-Authorize.png)
-(Task-api-UI-Authorize-PuttingToken.png)
-(Task-api-UI-Authorize-Execute.png)
+![Putting in the token](Task-api-UI-Authorize-PuttingToken.png)
+![Executed response](Task-api-UI-Authorize-Execute.png)
 
 ## Database
 
