@@ -108,13 +108,13 @@ content-type: application/json
 {"error": "Invalid or expired token"}
 ```
 
-## Swagger UI screenshot
+## Task-API UI screenshot
 
 Protected routes show a lock icon in `/docs`. Clicking **Authorize** and
 pasting a valid access token lets you call any protected route via
 "Try it out" without manually setting headers.
 
-![Swagger UI with bearer auth](swagger-auth-screenshot.png)
+![Task-API UI with bearer auth](Task-api-UI-Authorize.png)
 
 ## Database
 
