@@ -72,6 +72,11 @@ class TaskUpdate(BaseModel):
     done: bool | None = None
 
 
+class AuthCredentials(BaseModel):
+    email: str = ""
+    password: str = ""
+
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
@@ -93,6 +98,37 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/auth/signup", status_code=201)
+def signup(body: AuthCredentials):
+    if not body.email or not body.password:
+        raise HTTPException(status_code=400, detail="email and password are required")
+
+    try:
+        result = supabase.auth.sign_up({"email": body.email, "password": body.password})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {"user": result.user}
+
+
+@app.post("/auth/login")
+def login(body: AuthCredentials):
+    if not body.email or not body.password:
+        raise HTTPException(status_code=400, detail="email and password are required")
+
+    try:
+        result = supabase.auth.sign_in_with_password(
+            {"email": body.email, "password": body.password}
+        )
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid login credentials")
+
+    return {
+        "access_token": result.session.access_token,
+        "refresh_token": result.session.refresh_token,
+    }
 
 
 def find_task(task_id: int):
