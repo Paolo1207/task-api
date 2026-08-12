@@ -147,7 +147,20 @@ def protected_profile(request: Request):
     if not token:
         raise HTTPException(status_code=401, detail="Access token required")
 
-    return {"message": "token received (not verified yet)", "token_preview": token[:10] + "..."}
+    try:
+        result = supabase.auth.get_user(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    if result is None or result.user is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    user = result.user
+    return {
+        "id": user.id,
+        "email": user.email,
+        "created_at": str(user.created_at),
+    }
 
 
 def find_task(task_id: int):
