@@ -1,3 +1,5 @@
+import json
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -5,14 +7,18 @@ from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
+from pydantic import BaseModel, ValidationError, HttpUrl
 
 BASE_URL = "https://books.toscrape.com/"
 USER_AGENT = "FlyRankInternshipA9/1.0 (+https://github.com/Paolo1207/task-api)"
 TIMEOUT_SECONDS = 10
 DELAY_SECONDS = 0.5
 
-CACHE_DIR = Path(__file__).parent.parent / "cache"
+SCRAPER_ROOT = Path(__file__).parent.parent
+CACHE_DIR = SCRAPER_ROOT / "cache"
+OUTPUT_DIR = SCRAPER_ROOT / "output"
 CACHE_DIR.mkdir(exist_ok=True)
+OUTPUT_DIR.mkdir(exist_ok=True)
 
 
 def fetch(url: str, cache_name: str) -> str:
@@ -25,7 +31,7 @@ def fetch(url: str, cache_name: str) -> str:
 
     headers = {"User-Agent": USER_AGENT}
     response = requests.get(url, headers=headers, timeout=TIMEOUT_SECONDS)
-    response.encoding = "utf-8"  # force correct decoding — the site is UTF-8
+    response.encoding = "utf-8"
 
     if response.status_code != 200:
         raise RuntimeError(f"Fetch failed for {url}: status {response.status_code}")
@@ -67,7 +73,7 @@ def discover_catalogue_pages():
 
 def url_to_cache_name(url: str) -> str:
     """Turn a book URL into a safe, unique cache filename."""
-    slug = url.rstrip("/").split("/")[-2]  # e.g. "a-light-in-the-attic_1000"
+    slug = url.rstrip("/").split("/")[-2]
     return f"book-{slug}.html"
 
 
@@ -112,21 +118,86 @@ def extract_book(url: str, source_page: str) -> dict:
     }
 
 
+RATING_WORDS = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5}
+
+
+def normalize_record(raw: dict) -> dict:
+    """Turn raw scraped strings into clean, typed values, keeping the originals too."""
+    price_gbp = None
+    if raw["price_text"]:
+        match = re.search(r"[\d.]+", raw["price_text"])
+        if match:
+            price_gbp = float(match.group())
+
+    availability_count = None
+    in_stock = False
+    if raw["availability_text"]:
+        in_stock = "in stock" in raw["availability_text"].lower()
+        match = re.search(r"\((\d+) available\)", raw["availability_text"])
+        if match:
+            availability_count = int(match.group(1))
+
+    rating = RATING_WORDS.get(raw["rating_text"])
+
+    return {
+        **raw,
+        "price_gbp": price_gbp,
+        "in_stock": in_stock,
+        "availability_count": availability_count,
+        "rating": rating,
+    }
+
+
+class BookRecord(BaseModel):
+    title: str
+    product_url: HttpUrl
+    price_text: str
+    price_gbp: float
+    availability_text: str
+    in_stock: bool
+    availability_count: int | None = None
+    rating_text: str
+    rating: int
+    description: str | None = None
+    source_page: HttpUrl
+    fetched_at: str
+
+
 def main():
     pages_visited, discovered, unique_urls = discover_catalogue_pages()
     print(f"catalogue_pages={pages_visited}")
     print(f"discovered={discovered}")
     print(f"unique_urls={len(unique_urls)}")
 
-    records = []
-    for i, url in enumerate(unique_urls, start=1):
-        record = extract_book(url, source_page=BASE_URL)
-        records.append(record)
+    valid_records = []
+    invalid_records = []
+    seen_urls = set()
 
-    print(f"detail_pages={len(records)}")
-    print("\nSample record:")
-    for key, value in records[0].items():
-        print(f"  {key}: {value}")
+    for url in unique_urls:
+        raw = extract_book(url, source_page=BASE_URL)
+        normalized = normalize_record(raw)
+
+        # canonical identity: the product URL. Skip if we've already stored this one.
+        if normalized["product_url"] in seen_urls:
+            continue
+
+        try:
+            validated = BookRecord(**normalized)
+            valid_records.append(json.loads(validated.model_dump_json()))
+            seen_urls.add(normalized["product_url"])
+        except ValidationError as e:
+            invalid_records.append({"url": url, "reason": str(e)})
+
+    (OUTPUT_DIR / "books.json").write_text(
+        json.dumps(valid_records, indent=2), encoding="utf-8"
+    )
+    (OUTPUT_DIR / "errors.json").write_text(
+        json.dumps(invalid_records, indent=2), encoding="utf-8"
+    )
+
+    print(f"\nvalid_records={len(valid_records)}")
+    print(f"invalid_records={len(invalid_records)}")
+    print("Wrote output/books.json and output/errors.json")
 
 
 if __name__ == "__main__":
